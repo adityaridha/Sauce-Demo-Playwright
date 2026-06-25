@@ -11,7 +11,7 @@ tests/
 ├── *.spec.ts            # Test specs (login, inventory, product-detail, cart, checkout, e2e-full-flow)
 ├── pages/               # Page Object Model classes (one per page/component)
 └── data/                # Shared test data and constants
-playwright.config.ts     # Test runner config (browsers, retries, HTML reporter)
+playwright.config.ts     # Test runner config (browsers, retries, HTML + JSON reporters)
 .github/workflows/       # CI: push/PR runs + manual on-demand run
 ```
 
@@ -46,7 +46,8 @@ Run the suite on demand from the **Actions** tab, with the report published to
 
 **What you get:**
 - **Artifact** — `playwright-report/` is uploaded as the `playwright-report` artifact
-  (30-day retention), even when tests fail.
+  (30-day retention), even when tests fail. It contains both the browsable HTML report
+  and the machine-readable `results.json`.
 - **GitHub Pages** — the HTML report is published to the repo's Pages site. The live
   URL appears on the run's `github-pages` environment. Pages always serves the
   **latest** run's report (not a history).
