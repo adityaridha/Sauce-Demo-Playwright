@@ -30,7 +30,7 @@ npx playwright show-report          # open the HTML report
 
 ### `playwright.yml` — automatic
 Runs the full suite on every push and pull request to `main`/`master`, and uploads
-the HTML report as a build artifact.
+the HTML and JSON reports as build artifacts.
 
 ### `manual-tests.yml` — manual (workflow_dispatch)
 Run the suite on demand from the **Actions** tab, with the report published to
@@ -45,9 +45,9 @@ Run the suite on demand from the **Actions** tab, with the report published to
 3. Click **Run workflow**.
 
 **What you get:**
-- **Artifact** — `playwright-report/` is uploaded as the `playwright-report` artifact
-  (30-day retention), even when tests fail. It contains both the browsable HTML report
-  and the machine-readable `results.json`.
+- **Artifacts** (30-day retention, uploaded even when tests fail):
+  - `playwright-html-report` — the browsable HTML report (`playwright-report/`).
+  - `playwright-json-report` — the machine-readable `results.json`.
 - **GitHub Pages** — the HTML report is published to the repo's Pages site. The live
   URL appears on the run's `github-pages` environment. Pages always serves the
   **latest** run's report (not a history).

@@ -19,9 +19,19 @@ jobs:
       run: npx playwright install --with-deps
     - name: Run Playwright tests
       run: npx playwright test
-    - uses: actions/upload-artifact@v4
+    # Upload the browsable HTML report as its own artifact.
+    - name: Upload HTML report
+      uses: actions/upload-artifact@v4
       if: ${{ !cancelled() }}
       with:
-        name: playwright-report
+        name: playwright-html-report
         path: playwright-report/
+        retention-days: 30
+    # Upload the machine-readable JSON results as a separate artifact.
+    - name: Upload JSON report
+      uses: actions/upload-artifact@v4
+      if: ${{ !cancelled() }}
+      with:
+        name: playwright-json-report
+        path: playwright-report/results.json
         retention-days: 30

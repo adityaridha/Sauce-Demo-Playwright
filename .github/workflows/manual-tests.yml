@@ -67,15 +67,24 @@ jobs:
             npx playwright test "$SPEC"
           fi
 
-      # Keep the HTML report as a downloadable artifact. `!cancelled()`
-      # means it still uploads when tests FAIL — only a manual cancel
-      # skips it.
+      # Keep the browsable HTML report as a downloadable artifact.
+      # `!cancelled()` means it still uploads when tests FAIL — only a
+      # manual cancel skips it.
       - name: Upload HTML report artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-html-report
           path: playwright-report/
+          retention-days: 30
+
+      # Keep the machine-readable JSON results as a separate artifact.
+      - name: Upload JSON report artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-json-report
+          path: playwright-report/results.json
           retention-days: 30
 
       # Repackage the same report in the special format the Pages
