@@ -1,37 +1,123 @@
+# Run the Playwright suite, keep the HTML + JSON reports as artifacts,
+# and publish the HTML report to GitHub Pages.
+#
+# Triggers:
+#   - Manually from the Actions tab (with an optional `spec` to run).
+#   - Automatically when a pull request is merged into `main`.
 name: Playwright Tests
+
 on:
-  push:
-    branches: [ main, master ]
+  # Manual trigger with a single optional input: which spec to run.
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: 'Spec to run (file name, path, or test-title filter). Leave empty to run ALL tests.'
+        required: false
+        default: ''
+        type: string
+  # PR lifecycle on main. We listen for "closed" and then check below
+  # whether it was actually merged (a closed-without-merge PR is ignored).
   pull_request:
-    branches: [ main, master ]
+    types: [closed]
+    branches: [main]
+
+# Permissions needed by the Pages deployment:
+#   - contents: read   -> checkout the repo
+#   - pages: write     -> publish to GitHub Pages
+#   - id-token: write  -> let deploy-pages authenticate via OIDC
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Serialize Pages deployments: queue runs into one group and never
+# cancel a deployment that is already in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
+  # Job 1 — run the tests to build the reports.
   test:
+    name: Run Playwright tests
+    # Run on manual dispatch, or only when a PR was actually MERGED
+    # (skip PRs that were closed without merging).
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true }}
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: lts/*
-    - name: Install dependencies
-      run: npm ci
-    - name: Install Playwright Browsers
-      run: npx playwright install --with-deps
-    - name: Run Playwright tests
-      run: npx playwright test
-    # Upload the browsable HTML report as its own artifact.
-    - name: Upload HTML report
-      uses: actions/upload-artifact@v4
-      if: ${{ !cancelled() }}
-      with:
-        name: playwright-html-report
-        path: playwright-report/
-        retention-days: 30
-    # Upload the machine-readable JSON results as a separate artifact.
-    - name: Upload JSON report
-      uses: actions/upload-artifact@v4
-      if: ${{ !cancelled() }}
-      with:
-        name: playwright-json-report
-        path: playwright-report/results.json
-        retention-days: 30
+      # Pull the repository source into the runner.
+      - uses: actions/checkout@v4
+
+      # Install Node (LTS) so npm and Playwright are available.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # Install exact dependency versions from package-lock.json.
+      - name: Install dependencies
+        run: npm ci
+
+      # Download the browser binaries (and OS libs) Playwright drives.
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      # Run the tests. The `spec` input only exists for manual runs; on a
+      # PR-merge it is empty, so the whole suite runs.
+      - name: Run Playwright tests
+        env:
+          SPEC: ${{ inputs.spec }}
+        run: |
+          if [ -z "$SPEC" ]; then
+            echo "No spec provided — running ALL tests."
+            npx playwright test
+          else
+            echo "Running spec: $SPEC"
+            npx playwright test "$SPEC"
+          fi
+
+      # Browsable HTML report as its own artifact. `!cancelled()` keeps
+      # it uploading when tests FAIL — only a manual cancel skips it.
+      - name: Upload HTML report artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-html-report
+          path: playwright-report/
+          retention-days: 30
+
+      # Machine-readable JSON results as a separate artifact.
+      - name: Upload JSON report artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-json-report
+          path: playwright-report/results.json
+          retention-days: 30
+
+      # Repackage the HTML report in the special format the Pages deploy
+      # step consumes in the next job.
+      - name: Upload report for GitHub Pages
+        if: ${{ !cancelled() }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: playwright-report/
+
+  # Job 2 — publish the report uploaded above to GitHub Pages.
+  deploy:
+    name: Deploy report to GitHub Pages
+    needs: test
+    # Deploy even if tests failed (so the report is always published),
+    # but stay gated to the same merge/dispatch conditions as the test job.
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true) }}
+    runs-on: ubuntu-latest
+    # Bind to the github-pages environment and surface the live URL on
+    # the run summary once deployed.
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Take the uploaded Pages artifact and publish it live.
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

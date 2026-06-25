@@ -12,7 +12,7 @@ tests/
 ├── pages/               # Page Object Model classes (one per page/component)
 └── data/                # Shared test data and constants
 playwright.config.ts     # Test runner config (browsers, retries, HTML + JSON reporters)
-.github/workflows/       # CI: push/PR runs + manual on-demand run
+.github/workflows/       # CI: manual run + run on PR merge to main
 ```
 
 ## Running locally
@@ -26,18 +26,18 @@ npx playwright test login.spec.ts   # run a single spec
 npx playwright show-report          # open the HTML report
 ```
 
-## CI workflows
+## CI workflow
 
-### `playwright.yml` — automatic
-Runs the full suite on every push and pull request to `main`/`master`, and uploads
-the HTML and JSON reports as build artifacts.
+A single workflow, **`playwright.yml`**, runs the suite, keeps the HTML + JSON
+reports as artifacts, and publishes the HTML report to **GitHub Pages**.
 
-### `manual-tests.yml` — manual (workflow_dispatch)
-Run the suite on demand from the **Actions** tab, with the report published to
-**GitHub Pages**.
+**It triggers on:**
+- **Manual dispatch** — from the **Actions** tab, with an optional `spec` to run.
+- **PR merged to `main`** — runs automatically (and only) when a pull request is
+  merged. PRs closed without merging are ignored.
 
-**How to run:**
-1. Go to the **Actions** tab → **Manual Playwright Run** → **Run workflow**.
+**How to run it manually:**
+1. Go to the **Actions** tab → **Playwright Tests** → **Run workflow**.
 2. Fill in the **`spec`** field:
    - **Leave it empty** → runs **all** tests.
    - **Enter a target** → runs just that. Accepts a file name (`login.spec.ts`), a
