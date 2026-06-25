@@ -1,0 +1,79 @@
+name: Manual Playwright Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: 'Spec to run (file name, path, or test-title filter). Leave empty to run ALL tests.'
+        required: false
+        default: ''
+        type: string
+
+# Allow the deploy-pages job to publish to GitHub Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; don't cancel an in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Run Playwright tests
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      - name: Run Playwright tests
+        env:
+          SPEC: ${{ inputs.spec }}
+        run: |
+          if [ -z "$SPEC" ]; then
+            echo "No spec provided — running ALL tests."
+            npx playwright test
+          else
+            echo "Running spec: $SPEC"
+            npx playwright test "$SPEC"
+          fi
+
+      - name: Upload HTML report artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Upload report for GitHub Pages
+        if: ${{ !cancelled() }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: playwright-report/
+
+  deploy:
+    name: Deploy report to GitHub Pages
+    # Run even if tests failed, so the report is still published.
+    if: ${{ !cancelled() }}
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
