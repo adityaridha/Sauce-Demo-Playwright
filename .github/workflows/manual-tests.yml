@@ -1,5 +1,11 @@
+# Manually-triggered workflow: run the Playwright suite on demand,
+# keep the HTML report as a downloadable artifact, and publish it to
+# GitHub Pages so it can be browsed in a web page.
 name: Manual Playwright Run
 
+# Trigger: only runs when started by hand from the Actions tab.
+# It exposes a single optional input, `spec`, so the operator can
+# choose to run one spec or the whole suite.
 on:
   workflow_dispatch:
     inputs:
@@ -9,35 +15,46 @@ on:
         default: ''
         type: string
 
-# Allow the deploy-pages job to publish to GitHub Pages.
+# Permissions needed by the Pages deployment:
+#   - contents: read   -> checkout the repo
+#   - pages: write     -> publish to GitHub Pages
+#   - id-token: write  -> let deploy-pages authenticate via OIDC
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Only one Pages deployment at a time; don't cancel an in-progress one.
+# Serialize Pages deployments: queue runs into one group and never
+# cancel a deployment that is already in progress.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
+  # Job 1 — build the report by running the tests.
   test:
     name: Run Playwright tests
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
+      # Pull the repository source into the runner.
       - uses: actions/checkout@v4
 
+      # Install Node (LTS) so npm and Playwright are available.
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
 
+      # Install exact dependency versions from package-lock.json.
       - name: Install dependencies
         run: npm ci
 
+      # Download the browser binaries (and OS libs) Playwright drives.
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
 
+      # Run the tests. If the `spec` input is empty, run everything;
+      # otherwise pass it straight to `playwright test` as the target.
       - name: Run Playwright tests
         env:
           SPEC: ${{ inputs.spec }}
@@ -50,6 +67,9 @@ jobs:
             npx playwright test "$SPEC"
           fi
 
+      # Keep the HTML report as a downloadable artifact. `!cancelled()`
+      # means it still uploads when tests FAIL — only a manual cancel
+      # skips it.
       - name: Upload HTML report artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -58,22 +78,29 @@ jobs:
           path: playwright-report/
           retention-days: 30
 
+      # Repackage the same report in the special format the Pages
+      # deploy step consumes in the next job.
       - name: Upload report for GitHub Pages
         if: ${{ !cancelled() }}
         uses: actions/upload-pages-artifact@v3
         with:
           path: playwright-report/
 
+  # Job 2 — publish the report uploaded above to GitHub Pages.
   deploy:
     name: Deploy report to GitHub Pages
-    # Run even if tests failed, so the report is still published.
+    # Wait for the test job, but deploy even if tests failed so the
+    # report is always published (only a cancel stops it).
     if: ${{ !cancelled() }}
     needs: test
     runs-on: ubuntu-latest
+    # Bind to the github-pages environment and surface the live URL on
+    # the run summary once deployed.
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # Take the uploaded Pages artifact and publish it live.
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
